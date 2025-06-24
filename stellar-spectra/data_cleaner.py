@@ -51,5 +51,5 @@ def get_continuum_wavelengths(cont_pix_filename):
 
     continuum_pixels = np.load(f'{cont_pix_filename}.npz')
     wavelengths = continuum_pixels['wavelength']
-    cont_wavelengths = wavelengths[continuum_pixels['is_continuum'] == True]
+    return wavelengths[continuum_pixels['is_continuum'] == True]
     
