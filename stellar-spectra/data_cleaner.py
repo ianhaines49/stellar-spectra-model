@@ -1,4 +1,3 @@
-import bisect
 import numpy as np
 
 def update_errors(error_array, bitmask_array):
@@ -53,3 +52,38 @@ def get_continuum_wavelengths(cont_pix_filename):
     wavelengths = continuum_pixels['wavelength']
     return wavelengths[continuum_pixels['is_continuum'] == True]
     
+def closest_value(cont_wavelengths, spec_wavelengths):
+    '''
+    Returns spectra wavelengths closest to continuum wavelengths.
+    
+    Function performs a modified binary search to find spectra wavelengths
+    closest to the continuum wavelengths.
+    
+    Parameters
+    ----------
+    cont_wavelengths : numpy array
+        array containing all of the continuum wavelengths as determined by
+        successive application of The Cannon model
+    spec_wavelengths : numpy array
+        array containing the wavelengths of a given spectrum
+        
+    Returns
+    -------
+    fit_wavelengths : numpy array
+        array containing the spectrum wavelengths closest to continuum, ready
+        to be used for fitting spectra
+    '''
+
+    n, m = cont_wavelengths.size, spec_wavelengths.size
+
+    fit_wavelengths = np.empty(n, dtype=cont_wavelengths.dtype)
+
+    j = 0    #index pointer for spec_wavelengths
+    for i in range(n):
+        #steps through spec_wavelengths until it finds val closest to continuum
+        while j + 1 < m and abs(spec_wavelengths[j+1] - cont_wavelengths[i]) < \
+                            abs(spec_wavelengths[j] - cont_wavelengths[i]):
+            j += 1
+        fit_wavelengths[i] = spec_wavelengths[j]
+
+    return fit_wavelengths
