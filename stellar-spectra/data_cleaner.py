@@ -24,7 +24,7 @@ def update_errors(error_array, bitmask_array):
         updated errors to be used for WLS fitting
     '''
 
-    #4351 = 0b100001111111 corresponds to all bad pixels
+    # 4351 = 0b100001111111 corresponds to all bad pixels
     error_array[bitmask_array & 4351 > 0] = 10**10
     
     return error_array
@@ -56,7 +56,7 @@ def closest_value(cont_wavelengths, spec_wavelengths):
     '''
     Returns spectra wavelengths closest to continuum wavelengths.
     
-    Function performs a modified binary search to find spectra wavelengths
+    Function performs a binary search to find spectra wavelengths
     closest to the continuum wavelengths.
     
     Parameters
@@ -78,9 +78,9 @@ def closest_value(cont_wavelengths, spec_wavelengths):
 
     fit_wavelengths = np.empty(n, dtype=cont_wavelengths.dtype)
 
-    j = 0    #index pointer for spec_wavelengths
+    j = 0    # index pointer for spec_wavelengths
     for i in range(n):
-        #steps through spec_wavelengths until it finds val closest to continuum
+        # steps through spec_wavelengths until it finds val closest to continuum
         while j + 1 < m and abs(spec_wavelengths[j+1] - cont_wavelengths[i]) < \
                             abs(spec_wavelengths[j] - cont_wavelengths[i]):
             j += 1
