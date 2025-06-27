@@ -77,3 +77,34 @@ def data_extractor(fits_path = 'fits_files',
                     star_data_arr.append(star_data)
 
     return star_data_arr
+
+def data_extract():
+    return
+
+def comparator(data, low=-np.inf, hi=np.inf, less_than=False):
+    '''
+    Compares values in data to arg value and returns numpy array of booleans.
+    '''
+    if less_than:
+        return data < hi
+    return low < data
+
+def numeric_sifter(data, label, low, hi, less_than):
+    '''Runs the comparator function on data given.'''
+    return comparator(data[f'{label}'], low, hi, less_than)
+
+def cluster_sifter(data, field):
+    '''
+    Compares the field value of the data and returns numpy array of booleans.
+    '''
+    return data['field'] == field
+
+def table_merger(hdu1, hdu2):
+    '''
+    Merges two FITS tables together.
+    '''
+    nrows = hdu1.shape[0] + hdu2.shape[1]
+    hdu = fits.BinTableHDU.from_columns(hdu1[1].columns, nrows=nrows)
+    for colname in hdu2[1].columns.names:
+        hdu.data[colname][nrows:1] = hdu2[1].data[colname]
+    return hdu
