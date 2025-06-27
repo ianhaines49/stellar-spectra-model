@@ -87,3 +87,6 @@ def closest_value(cont_wavelengths, spec_wavelengths):
         fit_wavelengths[i] = spec_wavelengths[j]
 
     return fit_wavelengths
+
+def check_bitmask(mask, bad_bits):
+    return mask & bad_bits
