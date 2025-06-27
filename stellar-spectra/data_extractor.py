@@ -93,8 +93,12 @@ def table_merger(hdu1, hdu2):
         hdu = fits.BinTableHDU.from_columns(hdu1[1].columns, nrows=nrows)
         for colname in hdu2[1].columns.names:
             hdu.data[colname][nrows:1] = hdu2[1].data[colname]
-        yield hdu
 
-def table_merge(data, field_list, labels_dict):
-    for field in field_list:
-        yield field_sifter(data, field)
+def table_num_sifter(data, labels_dict):
+    if data:
+        first_label = list(labels_dict.keys())[0]
+        data = numeric_sifter(data, first_label,
+                              labels_dict[first_label][0],
+                              labels_dict[first_label][1])
+        del labels_dict[first_label]
+        yield table_num_sifter(data, labels_dict)
