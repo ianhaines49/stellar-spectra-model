@@ -42,7 +42,8 @@ def field_sifter(data, fields_list):
             init_bool = False
         # Gets indices for next field if master_indices_list is populated
         try:
-            master_indices_list = np.bitwise_or(master_indices_list, next(field_iterator))
+            master_indices_list = np.bitwise_or(master_indices_list,
+                                                next(field_iterator))
         except StopIteration:
             return data[master_indices_list]
 
@@ -74,6 +75,7 @@ def numeric_sifter(data, desired_values):
             init_bool = False
         # Gets indices for next label if master_indices_list is populated
         try:
-            master_indices_list = np.bitwise_and(master_indices_list, next(numeric_iterator))
+            master_indices_list = np.bitwise_and(master_indices_list,
+                                                 next(numeric_iterator))
         except StopIteration:
             return data[master_indices_list]
