@@ -1,5 +1,4 @@
 import numpy as np 
-from astropy.io import fits
 
 def numeric_indices_generator(data, labels_dict):
     '''Generator function to get indices of numeric data in range.'''
