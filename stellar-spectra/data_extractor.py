@@ -1,104 +1,80 @@
 import numpy as np 
 from astropy.io import fits
-import tqdm
 
-def data_extractor(fits_path = 'fits_files',
-                   allStar_path = 'allStar-r12-l33.fits',
-                   cluster_list = ['060+00', 'M15', 'N6791', 'K2_C4_168-21']):
+def numeric_indices_generator(data, labels_dict):
+    '''Generator function to get indices of numeric data in range.'''
+    if data is not None:
+        for label in labels_dict:
+            interval = labels_dict[f'{label}']
+            yield np.bitwise_and((interval[0] < data[f'{label}']),
+                                 (data[f'{label}'] < interval[1]))
+
+def field_indices_generator(data, fields_list):
+    '''Generator function to get indices of data in correct field.'''
+    if data is not None:
+        for field in fields_list:
+            yield data['field'] == field
+
+def field_sifter(data, fields_list):
     '''
-    Extracts relevant data from .fits files for spectra model.
+    Function that returns all records with correct field value.
     
-    Takes .fits file and for each star checks first if it is in one of the
-    stellar clusters in name_list. If the star is, the program checks if
-    the stellar parameters are in the correct range. If they are, then the
-    program extracts the spectrum, errors, bitmask, .fits filename for star,
-    signal-to-noise ratio, effective temperature, log of surface gravity,
-    [Fe/H], [Mg/Fe], [Si/Fe], and any miscellaneous information. Information is
-    organized in arrays, and then organized as a dictionary. Each dictionary is
-    then added to a final array.
+    Returns all records in fits data with correct field values by using an
+    iterator over the fields.
     
     Parameters
     ----------
-    fits_path = string
-        local path to the fits files grabbed from SDSS data archive
-    allStar_path = string
-        local path to the allStar data file
-    name_list = list
-        list of names of stellar clusters to extract information for
-        
+    data : .fits file data
+    fields_list : array_like
+    
     Returns
     -------
-    list
-        list of dicts where each dict represents data for one star '''
+    sifted_data : all .fits file records with a field in fields_list
+    '''
 
-    allStar = fits.open(allStar_path)
+    # Initializes iterator
+    master_indices_list = []
+    field_iterator = field_indices_generator(data, fields_list)
+    init_bool = True
+    for field in fields_list:
+        # Checks to see if master_indices_list needs populating
+        if init_bool:
+            master_indices_list = next(field_iterator)
+            init_bool = False
+        # Gets indices for next field if master_indices_list is populated
+        try:
+            master_indices_list = np.bitwise_or(master_indices_list, next(field_iterator))
+        except StopIteration:
+            return data[master_indices_list]
 
-    corner_teff = []
-    corner_logg = []
-    corner_fe_h = []
-    corner_mg_fe = []
-    corner_si_fe = []
-    star_data_arr = []
+def numeric_sifter(data, desired_values):
+    '''
+    Function that returns all records with correct numeric value.
+    
+    Returns all records in fits data with correct numeric values by using an
+    iterator over the desired_values dictionary.
+    
+    Parameters
+    ----------
+    data : .fits file data
+    desired_values : dictionary
+    
+    Returns
+    -------
+    sifted_data : all .fits file records with correct numeric values
+    '''
 
-    for i in tqdm.tqdm(range(len(allStar[1].data))):
-        
-        star_data = {}
-        
-        if allStar[1].data[i][7] in cluster_list:
-            # checks T_eff, log(g), [Fe/H], [Mg/Fe], [Si/Fe], and SNR
-            if 0 < allStar[1].data[i][75] < 5700 and \
-                0 < allStar[1].data[i][77] < 4 and \
-                -1 < allStar[1].data[i][114] and \
-                -9998 < allStar[1].data[i][102] and \
-                -9998 < allStar[1].data[i][104] and \
-                allStar[1].data[i][31] > 50:
-                
-                # opens .fits file for specific star
-                hdul = fits.open(f'{fits_path}/apStar-r12-{allStar[1].data[i][4]}.fits')
-                
-                if isinstance(hdul[1].data[0], np.ndarray):
-                    corner_teff.append(allStar[1].data[i][75])
-                    corner_logg.append(allStar[1].data[i][77])
-                    corner_fe_h.append(allStar[1].data[i][114])
-                    corner_mg_fe.append(allStar[1].data[i][102])
-                    corner_si_fe.append(allStar[1].data[i][104])
-
-                    star_data['spectrum'] = hdul[1].data[0]
-                    star_data['errors'] = hdul[2].data[0]
-                    star_data['bitmask'] = hdul[3].data[0]
-                    star_data['filename'] = allStar[1].data[i][4]
-                    star_data['snr'] = allStar[1].data[i][31]
-                    star_data['teff'] = allStar[1].data[i][75]
-                    star_data['logg'] = allStar[1].data[i][77]
-                    star_data['fe_h'] = allStar[1].data[i][114]
-                    star_data['mg_fe'] = allStar[1].data[i][102]
-                    star_data['si_fe'] = allStar[1].data[i][104]
-                    star_data['allStar_misc'] = allStar[1].data[i]
-                    star_data_arr.append(star_data)
-
-    return star_data_arr
-
-def numeric_sifter(data, label, low=-np.inf, hi=np.inf):
-    '''Returns data within the interval (low, hi).'''
-    return data[np.bitwise_and((low < data[f'{label}']), (data[f'{label}'] < hi))]
-
-def field_sifter(data, field):
-    '''Returns all data for a specific sky field.'''
-    return data[data['field'] == field]
-
-def table_merger(hdu1, hdu2):
-    '''Merges two FITS tables together.'''
-    if hdu1:
-        nrows = hdu1.shape[0] + hdu2.shape[1]
-        hdu = fits.BinTableHDU.from_columns(hdu1[1].columns, nrows=nrows)
-        for colname in hdu2[1].columns.names:
-            hdu.data[colname][nrows:1] = hdu2[1].data[colname]
-
-def table_num_sifter(data, labels_dict):
-    if data:
-        first_label = list(labels_dict.keys())[0]
-        data = numeric_sifter(data, first_label,
-                              labels_dict[first_label][0],
-                              labels_dict[first_label][1])
-        del labels_dict[first_label]
-        yield table_num_sifter(data, labels_dict)
+    # Initializes iterator
+    master_indices_list = []
+    numeric_iterator = numeric_indices_generator(data, desired_values)
+    init_bool = True
+    for label in desired_values:
+        # Checks to see if master_indices_list needs populating
+        if init_bool:
+            master_indices_list = next(numeric_iterator)
+            init_bool = False
+        # Gets indices for next label if master_indices_list is populated
+        try:
+            master_indices_list = np.bitwise_and(master_indices_list, next(numeric_iterator))
+        except StopIteration:
+            return data[master_indices_list]
