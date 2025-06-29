@@ -1,37 +1,38 @@
 import numpy as np
 from astropy.io import fits
+import corner
 import tqdm
 
-def update_errors(error_array, bitmask_array):
+def bad_pix_indices(bitmask_array, bad_pixels_dict):
     '''
-    Updates the errors of spectrum at each pixel based on bitmask data.
+    Gets the indices of bad pixels.
     
     Function takes in the errors and bitmask arrays associated with each
-    .fits file and updates the errors based on the bitmask. Errors are updated
-    to be 10^10 so that the pixel doesn't affect the WLS fit. The structure of
+    .fits file and updates the errors based on the bitmask. The structure of
     the APOGEE pixel error flags and further info can be found at
     https://www.sdss4.org/dr17/algorithms/bitmasks/#APOGEE_PIXMASK
 
     Parameters
     ----------
-    error_array : numpy array
-        array of the errors for each pixel of a given spectrum
     bitmask_array : numpy array
-        array of bitmasks indicating which pixels are bad
-        and what errors they have
+        array of bitmasks indicating what errors each pixel has
+    bad_pixels_dict : dictionary
+        dictionary of which pixel errors are significant
     
     Returns
     -------
-    numpy array
-        updated errors to be used for WLS fitting
+    bad_pixels : numpy array
+        indices of bad pixels to be ignored when performing WLS
     '''
 
-    # 4351 = 0b100001111111 corresponds to all bad pixels
-    error_array[bitmask_array & 4351 > 0] = 10**10
+    # Creates bitmask for all bad pixels provided in bad_pixels_dict
+    bit_sum = 0
+    for key in bad_pixels_dict:
+        bit_sum += 2**int(bad_pixels_dict[f'{key}'])
     
-    return error_array
+    return bitmask_array & bit_sum > 0
 
-def get_continuum_wavelengths(cont_pix_filename):
+def get_continuum_wavelengths(filepath):
     '''
     Determines which wavelengths are closest to continuum.
 
@@ -40,7 +41,7 @@ def get_continuum_wavelengths(cont_pix_filename):
 
     Parameters
     ----------
-    cont_pixels_filename : string
+    filename : string
         contains a dict containing an array of pixels and an array of booleans
         saying which pixels are continuum pixels
     
@@ -50,7 +51,7 @@ def get_continuum_wavelengths(cont_pix_filename):
         array containing continuum wavelengths
     '''
 
-    continuum_pixels = np.load(f'{cont_pix_filename}.npz')
+    continuum_pixels = np.load(f'{filepath}')
     wavelengths = continuum_pixels['wavelength']
     return wavelengths[continuum_pixels['is_continuum'] == True]
     
@@ -77,12 +78,10 @@ def closest_value(cont_wavelengths, spec_wavelengths):
     '''
 
     n, m = cont_wavelengths.size, spec_wavelengths.size
-
     fit_wavelengths = np.empty(n, dtype=cont_wavelengths.dtype)
-
-    j = 0    # index pointer for spec_wavelengths
+    j = 0    # Index pointer for spec_wavelengths
     for i in range(n):
-        # steps through spec_wavelengths until it finds val closest to continuum
+        # Steps through spec_wavelengths until it finds val closest to continuum
         while j + 1 < m and abs(spec_wavelengths[j+1] - cont_wavelengths[i]) < \
                             abs(spec_wavelengths[j] - cont_wavelengths[i]):
             j += 1
@@ -90,13 +89,7 @@ def closest_value(cont_wavelengths, spec_wavelengths):
 
     return fit_wavelengths
 
-def check_bitmask(mask, bad_bits):
-    return mask & bad_bits
-
-
-def data_extractor(fits_path = 'fits_files',
-                   allStar_path = 'allStar-r12-l33.fits',
-                   cluster_list = ['060+00', 'M15', 'N6791', 'K2_C4_168-21']):
+def data_extractor(fits_path, allStar_path, cluster_list):
     '''
     Extracts relevant data from .fits files for spectra model.
     
@@ -170,3 +163,10 @@ def data_extractor(fits_path = 'fits_files',
 
     return star_data_arr
 
+def corner_plot_values(data, plot_labels):
+    label_values = np.empty(len(plot_labels), dtype=type(data[plot_labels[0]]))
+    i = 0
+    for label in plot_labels:
+        label_values[i] = data[f'{label}']
+        i += 1
+    return np.vstack(label_values).T
