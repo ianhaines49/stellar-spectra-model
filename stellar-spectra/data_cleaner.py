@@ -107,11 +107,11 @@ def bad_pix_indices(bitmask_array, bad_pixels_dict, len):
     # Creates bitmask for all bad pixels provided in bad_pixels_dict
     bit_sum = 0
     for key in bad_pixels_dict:
-        bit_sum += 2**int(bad_pixels_dict[f'{key}'])
+        bit_sum += 2**int(key)
 
     bad_bitmask = np.full(len, bit_sum)
     
-    return bitmask_array & bad_bitmask > 0
+    return np.where(bitmask_array & bad_bitmask > 0)[0]
 
 def update_errors(data, bad_pixels_dict):
     '''
@@ -129,13 +129,15 @@ def update_errors(data, bad_pixels_dict):
         dictionary format must be {'<digit from 0-14>' : 1}; if a digit is
         not included as a key it is assumed that there is no pixel error    
     '''
-    mask_spectra = data[3].data
+    updated_errors = data[2].data.copy()
+    mask_spectra = data[3].data.copy()
+    nwave = data[0].header['nwave']
     if type(mask_spectra[0]) == np.ndarray:
-        mask_spectra[0][bad_pix_indices(mask_spectra[0], bad_pixels_dict)] = 1E+10
-        return mask_spectra[0]
+        updated_errors[0][bad_pix_indices(mask_spectra[0], bad_pixels_dict, nwave)] = 1E+10
+        return updated_errors[0]
     
-    mask_spectra[bad_pix_indices(mask_spectra, bad_pixels_dict)] = 1E+10
-    return mask_spectra[0]
+    updated_errors[bad_pix_indices(mask_spectra, bad_pixels_dict, nwave)] = 1E+10
+    return updated_errors
 
 def create_wavelengths(data):
     '''Creates apStar wavelengths from HDUList.
@@ -164,9 +166,9 @@ def interval_cut(data, interval):
 
     start = interval[0]
     end = interval[1]
-    return np.bitwise_and((start < data),(data < end))
+    return np.intersect1d(np.where(start < data)[0], np.where(data < end)[0])
 
-def data_normalizer(data, filepath, interval):
+def data_normalizer(data, filepath, interval, bad_pix_dict):
     '''
     Takes in apStar data and returns a normalized version.
     
@@ -190,8 +192,18 @@ def data_normalizer(data, filepath, interval):
     # Initialize spectrum and continuum wavelengths data
     spec_wavelengths = create_wavelengths(data)
     cont_wavelengths = get_continuum_wavelengths(filepath)
-    spectrum = data[1].data[0]
-    errors = data[2].data[0]
+    spectrum = data[1].data[0].copy()
+    errors = update_errors(data, bad_pix_dict)
+
+    # Determine indices of data in correct interval
+    cut_inds = interval_cut(spec_wavelengths, interval)
+    cont_cut_inds = interval_cut(cont_wavelengths, interval)
+
+    # Cut spectra data
+    spec_wavelengths = spec_wavelengths[cut_inds]
+    cont_wavelengths = cont_wavelengths[cont_cut_inds]
+    spectrum = spectrum[cut_inds]
+    errors = errors[cut_inds]
     
     # Get continuum spectrum wavelengths, spectrum, and errors
     cont_inds = closest_value(cont_wavelengths, spec_wavelengths)
@@ -199,17 +211,11 @@ def data_normalizer(data, filepath, interval):
     ctm_spectrum = spectrum[cont_inds]
     ctm_errors = errors[cont_inds]
 
-    # Determine indices of data in correct interval
-    cut_inds = interval_cut(ctm_spec_wavelengths, interval)
-
-    # Get spectrum and error, fit with Cheby polys, and calculate normalization
-    cut_spec_wavelengths = ctm_spec_wavelengths[cut_inds]
-    cut_spectrum = ctm_spectrum[cut_inds]
-    cut_errors = ctm_errors[cut_inds]
+    # Fit with Cheby polys, and calculate normalization
     cheby_coeffs = np.polynomial.chebyshev.Chebyshev.fit(
-        x=cut_spec_wavelengths, y=cut_spectrum, deg=2,
+        x=ctm_spec_wavelengths, y=ctm_spectrum, deg=2,
         window=[spec_wavelengths[0],spec_wavelengths[-1]],
-        w=1/cut_errors
+        w=1/ctm_errors
         )
 
     # Calculate normalization for interval
