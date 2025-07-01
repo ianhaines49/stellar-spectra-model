@@ -1,0 +1,3 @@
+Pipeline:
+
+allStar-r12-l33.fits   ----- data_extractor.py ----->   cut_fits_data (3036 files) (saved to memory)
