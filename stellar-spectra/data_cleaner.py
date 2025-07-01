@@ -59,29 +59,6 @@ def closest_value(cont_wavelengths, spec_wavelengths):
 
     return fit_bools
 
-def corner_plot_values(data, plot_labels):
-    '''
-    Function gets selected data for corner plot by iterating over labels given.
-
-    Parameters
-    ----------
-    data : FITS_rec
-        allStar data
-    plot_labels : arraylike
-        arraylike of labels to get data for
-
-    Returns
-    -------
-    out : ndarray
-        vertically stacked array of corner plot data
-    '''
-    label_values = np.empty(len(plot_labels), dtype=type(data[plot_labels[0]]))
-    i = 0
-    for label in plot_labels:
-        label_values[i] = data[f'{label}']
-        i += 1
-    return np.vstack(label_values).T
-
 def bad_pix_indices(bitmask_array, bad_pixels_dict, len):
     '''
     Gets the indices of bad pixels.
