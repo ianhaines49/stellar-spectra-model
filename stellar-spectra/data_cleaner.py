@@ -1,36 +1,5 @@
 import numpy as np
 from astropy.io import fits
-import corner
-import tqdm
-
-def bad_pix_indices(bitmask_array, bad_pixels_dict):
-    '''
-    Gets the indices of bad pixels.
-    
-    Function takes in the errors and bitmask arrays associated with each
-    .fits file and updates the errors based on the bitmask. The structure of
-    the APOGEE pixel error flags and further info can be found at
-    https://www.sdss4.org/dr17/algorithms/bitmasks/#APOGEE_PIXMASK
-
-    Parameters
-    ----------
-    bitmask_array : numpy array
-        array of bitmasks indicating what errors each pixel has
-    bad_pixels_dict : dictionary
-        dictionary of which pixel errors are significant
-    
-    Returns
-    -------
-    bad_pixels : numpy array
-        indices of bad pixels to be ignored when performing WLS
-    '''
-
-    # Creates bitmask for all bad pixels provided in bad_pixels_dict
-    bit_sum = 0
-    for key in bad_pixels_dict:
-        bit_sum += 2**int(bad_pixels_dict[f'{key}'])
-    
-    return bitmask_array & bit_sum > 0
 
 def get_continuum_wavelengths(filepath):
     '''
@@ -47,7 +16,7 @@ def get_continuum_wavelengths(filepath):
     
     Returns
     -------
-    numpy array
+    out : ndarray
         array containing continuum wavelengths
     '''
 
@@ -57,116 +26,198 @@ def get_continuum_wavelengths(filepath):
     
 def closest_value(cont_wavelengths, spec_wavelengths):
     '''
-    Returns spectra wavelengths closest to continuum wavelengths.
+    Returns wavelength indices closest to continuum wavelengths.
     
     Function performs a binary search to find spectra wavelengths
-    closest to the continuum wavelengths.
+    closest to the continuum wavelengths and returns the indices of
+    closest values.
     
     Parameters
     ----------
-    cont_wavelengths : numpy array
+    cont_wavelengths : ndarray
         array containing all of the continuum wavelengths as determined by
         successive application of The Cannon model
-    spec_wavelengths : numpy array
+    spec_wavelengths : ndarray
         array containing the wavelengths of a given spectrum
         
     Returns
     -------
-    fit_wavelengths : numpy array
+    fit_bools : ndarray
         array containing the spectrum wavelengths closest to continuum, ready
         to be used for fitting spectra
     '''
 
     n, m = cont_wavelengths.size, spec_wavelengths.size
-    fit_wavelengths = np.empty(n, dtype=cont_wavelengths.dtype)
+    fit_bools = np.full(m, False)
     j = 0    # Index pointer for spec_wavelengths
     for i in range(n):
         # Steps through spec_wavelengths until it finds val closest to continuum
-        while j + 1 < m and abs(spec_wavelengths[j+1] - cont_wavelengths[i]) < \
-                            abs(spec_wavelengths[j] - cont_wavelengths[i]):
+        while j + 1 < m and abs(spec_wavelengths[j+1] - cont_wavelengths[i]) \
+                            < abs(spec_wavelengths[j] - cont_wavelengths[i]):
             j += 1
-        fit_wavelengths[i] = spec_wavelengths[j]
+        fit_bools[j] = True
 
-    return fit_wavelengths
-
-def data_extractor(fits_path, allStar_path, cluster_list):
-    '''
-    Extracts relevant data from .fits files for spectra model.
-    
-    Takes .fits file and for each star checks first if it is in one of the
-    stellar clusters in name_list. If the star is, the program checks if
-    the stellar parameters are in the correct range. If they are, then the
-    program extracts the spectrum, errors, bitmask, .fits filename for star,
-    signal-to-noise ratio, effective temperature, log of surface gravity,
-    [Fe/H], [Mg/Fe], [Si/Fe], and any miscellaneous information. Information is
-    organized in arrays, and then organized as a dictionary. Each dictionary is
-    then added to a final array.
-    
-    Parameters
-    ----------
-    fits_path = string
-        local path to the fits files grabbed from SDSS data archive
-    allStar_path = string
-        local path to the allStar data file
-    name_list = list
-        list of names of stellar clusters to extract information for
-        
-    Returns
-    -------
-    list
-        list of dicts where each dict represents data for one star '''
-
-    allStar = fits.open(allStar_path)
-
-    corner_teff = []
-    corner_logg = []
-    corner_fe_h = []
-    corner_mg_fe = []
-    corner_si_fe = []
-    star_data_arr = []
-
-    for i in tqdm.tqdm(range(len(allStar[1].data))):
-        
-        star_data = {}
-        
-        if allStar[1].data[i][7] in cluster_list:
-            # checks T_eff, log(g), [Fe/H], [Mg/Fe], [Si/Fe], and SNR
-            if 0 < allStar[1].data[i][75] < 5700 and \
-                0 < allStar[1].data[i][77] < 4 and \
-                -1 < allStar[1].data[i][114] and \
-                -9998 < allStar[1].data[i][102] and \
-                -9998 < allStar[1].data[i][104] and \
-                allStar[1].data[i][31] > 50:
-                
-                # opens .fits file for specific star
-                hdul = fits.open(f'{fits_path}/apStar-r12-{allStar[1].data[i][4]}.fits')
-                
-                if isinstance(hdul[1].data[0], np.ndarray):
-                    corner_teff.append(allStar[1].data[i][75])
-                    corner_logg.append(allStar[1].data[i][77])
-                    corner_fe_h.append(allStar[1].data[i][114])
-                    corner_mg_fe.append(allStar[1].data[i][102])
-                    corner_si_fe.append(allStar[1].data[i][104])
-
-                    star_data['spectrum'] = hdul[1].data[0]
-                    star_data['errors'] = hdul[2].data[0]
-                    star_data['bitmask'] = hdul[3].data[0]
-                    star_data['filename'] = allStar[1].data[i][4]
-                    star_data['snr'] = allStar[1].data[i][31]
-                    star_data['teff'] = allStar[1].data[i][75]
-                    star_data['logg'] = allStar[1].data[i][77]
-                    star_data['fe_h'] = allStar[1].data[i][114]
-                    star_data['mg_fe'] = allStar[1].data[i][102]
-                    star_data['si_fe'] = allStar[1].data[i][104]
-                    star_data['allStar_misc'] = allStar[1].data[i]
-                    star_data_arr.append(star_data)
-
-    return star_data_arr
+    return fit_bools
 
 def corner_plot_values(data, plot_labels):
+    '''
+    Function gets selected data for corner plot by iterating over labels given.
+
+    Parameters
+    ----------
+    data : FITS_rec
+        allStar data
+    plot_labels : arraylike
+        arraylike of labels to get data for
+
+    Returns
+    -------
+    out : ndarray
+        vertically stacked array of corner plot data
+    '''
     label_values = np.empty(len(plot_labels), dtype=type(data[plot_labels[0]]))
     i = 0
     for label in plot_labels:
         label_values[i] = data[f'{label}']
         i += 1
     return np.vstack(label_values).T
+
+def bad_pix_indices(bitmask_array, bad_pixels_dict, len):
+    '''
+    Gets the indices of bad pixels.
+    
+    Function takes in the errors and bitmask arrays associated with each
+    .fits file and updates the errors based on the bitmask. The structure of
+    the APOGEE pixel error flags and further info can be found at
+    https://www.sdss4.org/dr17/algorithms/bitmasks/#APOGEE_PIXMASK
+
+    Parameters
+    ----------
+    bitmask_array : ndrray
+        array of bitmasks indicating what errors each pixel has
+    bad_pixels_dict : dictionary
+        dictionary of which pixel errors are significant
+    
+    Returns
+    -------
+    bad_pixels : ndarray
+        indices of bad pixels to be ignored when performing WLS
+    '''
+
+    # Creates bitmask for all bad pixels provided in bad_pixels_dict
+    bit_sum = 0
+    for key in bad_pixels_dict:
+        bit_sum += 2**int(bad_pixels_dict[f'{key}'])
+
+    bad_bitmask = np.full(len, bit_sum)
+    
+    return bitmask_array & bad_bitmask > 0
+
+def update_errors(data, bad_pixels_dict):
+    '''
+    Updates errors based on bitmasks
+    
+    Function takes apStar HDUList data and a dictionary of which pixels are
+    bad and creates an updated errors array where bad pixels have an error
+    of 1E+10, the default value for unused pixels.
+    
+    Parameters
+    ----------
+    data : HDUList
+        apStar data; data[2] is error spectra; data[3] is mask spectra
+    bad_pixels_dict : dictionary
+        dictionary format must be {'<digit from 0-14>' : 1}; if a digit is
+        not included as a key it is assumed that there is no pixel error    
+    '''
+    mask_spectra = data[3].data
+    if type(mask_spectra[0]) == np.ndarray:
+        mask_spectra[0][bad_pix_indices(mask_spectra[0], bad_pixels_dict)] = 1E+10
+        return mask_spectra[0]
+    
+    mask_spectra[bad_pix_indices(mask_spectra, bad_pixels_dict)] = 1E+10
+    return mask_spectra[0]
+
+def create_wavelengths(data):
+    '''Creates apStar wavelengths from HDUList.
+
+    Creates apStar wavelengths from HDUList by accessing header values.
+    Returns linear wavelength array values.
+
+    Parameters
+    ----------
+    data : HDUList
+        apStar HDUList file data
+
+    Returns
+    -------
+    out : ndarray
+        linearly spaced array of wavelengths
+    '''
+
+    # Initialize spectrum and continuum wavelengths data
+    start = data[1].header['crval1']
+    delta = data[1].header['cdelt1']
+    return np.logspace(start, start + delta*8575, 8575)
+
+def interval_cut(data, interval):
+    '''Returns data within a specific interval.'''
+
+    start = interval[0]
+    end = interval[1]
+    return np.bitwise_and((start < data),(data < end))
+
+def data_normalizer(data, filepath, interval):
+    '''
+    Takes in apStar data and returns a normalized version.
+    
+    Function normalizes data by fitting with Chebyshev polynomials, then
+    evaluates Chebyshev series for each point to determine normalized value.
+    
+    Parameters
+    ----------
+    data : HDUList
+        expected to be apStar HDU file
+    filepath : string
+        path to continuum_pixels_apogee.npz file
+    interval : arraylike or tuple
+        endpoints of the wavelength range
+    Returns
+    -------
+    out : ndarray
+        normalized apStar file data
+    '''
+
+    # Initialize spectrum and continuum wavelengths data
+    spec_wavelengths = create_wavelengths(data)
+    cont_wavelengths = get_continuum_wavelengths(filepath)
+    spectrum = data[1].data[0]
+    errors = data[2].data[0]
+    
+    # Get continuum spectrum wavelengths, spectrum, and errors
+    cont_inds = closest_value(cont_wavelengths, spec_wavelengths)
+    ctm_spec_wavelengths = spec_wavelengths[cont_inds]
+    ctm_spectrum = spectrum[cont_inds]
+    ctm_errors = errors[cont_inds]
+
+    # Determine indices of data in correct interval
+    cut_inds = interval_cut(ctm_spec_wavelengths, interval)
+
+    # Get spectrum and error, fit with Cheby polys, and calculate normalization
+    cut_spec_wavelengths = ctm_spec_wavelengths[cut_inds]
+    cut_spectrum = ctm_spectrum[cut_inds]
+    cut_errors = ctm_errors[cut_inds]
+    cheby_coeffs = np.polynomial.chebyshev.Chebyshev.fit(
+        x=cut_spec_wavelengths, y=cut_spectrum, deg=2,
+        window=[spec_wavelengths[0],spec_wavelengths[-1]],
+        w=1/cut_errors
+        )
+
+    # Calculate normalization for interval
+    dense_cut_inds = interval_cut(spec_wavelengths, interval)
+    dense_spec_wavelengths = spec_wavelengths[dense_cut_inds]
+    dense_spectrum = spectrum[dense_cut_inds]
+    dense_errors = errors[dense_cut_inds]
+    normalization = np.polynomial.chebyshev.chebval(dense_spec_wavelengths,
+                                                    cheby_coeffs.coef)
+
+    return [dense_spectrum/normalization, dense_errors/normalization]
