@@ -1,3 +1,7 @@
 Pipeline:
 
 allStar-r12-l33.fits   ----- data_extractor.py ----->   cut_fits_data (3036 files) (saved to memory)
+                           _
+continuum_pixels_apogee.npz |   ----- data_cleaner.py ----->   normed_apStar
+apStar-r12-*.fits          _|
+
